@@ -34,6 +34,10 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private MessageAdapter messageAdapter;
     private Context context;
     private static final int DEFAULT_MSG_LENGTH_LIMIT = 1000;
+    private PresenterMessages presenterMessages;
+    private String username;
+    private static final String ANONYMOUS = "anonymous";
+
     public FragmentMessages() {
         // Required empty public constructor
     }
@@ -53,7 +57,9 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         // Inflate the layout for this fragment
         View rootView = inflater.inflate(R.layout.fragment_messages, container, false);
         friendlyMessages = new ArrayList<>();
+        username = ANONYMOUS;
         context = getActivity();
+        presenterMessages = new PresenterMessages(context, this);
         initializeViews(rootView);
         initRecyclerView();
         setListeners();
@@ -86,6 +92,8 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private View.OnClickListener btnSendOnClickListener = new View.OnClickListener() {
         @Override
         public void onClick(View v) {
+            FriendlyMessage friendlyMessage = new FriendlyMessage(edtMessage.getText().toString(), username, null);
+            presenterMessages.sendMessage(friendlyMessage);
             edtMessage.setText("");
         }
     };
