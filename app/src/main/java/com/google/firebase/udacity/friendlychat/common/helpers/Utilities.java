@@ -16,16 +16,5 @@ import java.security.NoSuchAlgorithmException;
  */
 
 public  class Utilities {
-    public static void getHashKey(Context context) {
-        try {
-            @SuppressLint("PackageManagerGetSignatures") PackageInfo info = context.getPackageManager().getPackageInfo("com.google.firebase.udacity.friendlychat", PackageManager.GET_SIGNATURES);
-            for (Signature signature : info.signatures) {
-                MessageDigest md = MessageDigest.getInstance("SHA");
-                md.update(signature.toByteArray());
-                Log.d("KeyHash:", Base64.encodeToString(md.digest(), Base64.DEFAULT));
-            }
-        } catch (PackageManager.NameNotFoundException | NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-    }
+
 }
