@@ -2,6 +2,7 @@ package com.google.firebase.udacity.friendlychat.messages;
 
 import android.content.Context;
 
+import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.udacity.friendlychat.common.base.PresenterBase;
@@ -17,14 +18,13 @@ public class PresenterMessages extends PresenterBase {
     private FirebaseDatabase firebaseDatabase;
     private DatabaseReference databaseReference;
 
-    public PresenterMessages(Context context, ViewMessages viewMessages) {
+    public PresenterMessages(Context context, ViewMessages viewMessages , DatabaseReference databaseReference) {
         this.viewMessages = viewMessages;
         this.context = context;
+        this.databaseReference = databaseReference;
     }
 
     public void sendMessage(FriendlyMessage friendlyMessage) {
-        firebaseDatabase = FirebaseDatabase.getInstance();
-        databaseReference = firebaseDatabase.getReference().child("messages");
-        databaseReference.push().setValue(friendlyMessage);
+       this.databaseReference.push().setValue(friendlyMessage);
     }
 }

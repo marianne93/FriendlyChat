@@ -16,6 +16,11 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
 
+import com.google.firebase.database.ChildEventListener;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.udacity.friendlychat.MessageAdapter;
 import com.google.firebase.udacity.friendlychat.R;
 import com.google.firebase.udacity.friendlychat.common.base.FragmentBase;
@@ -37,6 +42,9 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private PresenterMessages presenterMessages;
     private String username;
     private static final String ANONYMOUS = "anonymous";
+    private FirebaseDatabase firebaseDatabase;
+    private DatabaseReference databaseReference;
+    private LinearLayoutManager linearLayoutManager;
 
     public FragmentMessages() {
         // Required empty public constructor
@@ -59,7 +67,8 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         friendlyMessages = new ArrayList<>();
         username = ANONYMOUS;
         context = getActivity();
-        presenterMessages = new PresenterMessages(context, this);
+        databaseReference = FirebaseDatabase.getInstance().getReference().child("messages");
+        presenterMessages = new PresenterMessages(context, this, databaseReference);
         initializeViews(rootView);
         initRecyclerView();
         setListeners();
@@ -67,7 +76,9 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     }
 
     private void initRecyclerView() {
-        rvMessages.setLayoutManager(new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false));
+        linearLayoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
+        linearLayoutManager.setStackFromEnd(true);
+        rvMessages.setLayoutManager(linearLayoutManager);
         messageAdapter = new MessageAdapter(context, friendlyMessages);
         rvMessages.setAdapter(messageAdapter);
     }
@@ -87,8 +98,54 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         btnPhotoPicker.setOnClickListener(btnPhotoPickerOnClickListener);
         edtMessage.addTextChangedListener(edtMessageTextWatcher);
         btnSend.setOnClickListener(btnSendOnClickListener);
+        databaseReference.addChildEventListener(childEventListener);
+        messageAdapter.registerAdapterDataObserver(adapterDataObserver);
     }
 
+    private RecyclerView.AdapterDataObserver adapterDataObserver = new RecyclerView.AdapterDataObserver() {
+        @Override
+        public void onItemRangeInserted(int positionStart, int itemCount) {
+            super.onItemRangeInserted(positionStart, itemCount);
+            int friendlyMessageCount = messageAdapter.getItemCount();
+            int lastVisiblePosition =
+                    linearLayoutManager.findLastCompletelyVisibleItemPosition();
+            // If the recycler view is initially being loaded or the
+            // user is at the bottom of the list, scroll to the bottom
+            // of the list to show the newly added message.
+            if (lastVisiblePosition == -1 ||
+                    (positionStart >= (friendlyMessageCount - 1) &&
+                            lastVisiblePosition == (positionStart - 1))) {
+                rvMessages.scrollToPosition(positionStart);
+            }
+        }
+    };
+    private ChildEventListener childEventListener = new ChildEventListener() {
+        @Override
+        public void onChildAdded(DataSnapshot dataSnapshot, String s) {
+            friendlyMessages.add(dataSnapshot.getValue(FriendlyMessage.class));
+            messageAdapter.notifyItemInserted(friendlyMessages.size() - 1);
+        }
+
+        @Override
+        public void onChildChanged(DataSnapshot dataSnapshot, String s) {
+
+        }
+
+        @Override
+        public void onChildRemoved(DataSnapshot dataSnapshot) {
+
+        }
+
+        @Override
+        public void onChildMoved(DataSnapshot dataSnapshot, String s) {
+
+        }
+
+        @Override
+        public void onCancelled(DatabaseError databaseError) {
+
+        }
+    };
     private View.OnClickListener btnSendOnClickListener = new View.OnClickListener() {
         @Override
         public void onClick(View v) {
