@@ -38,16 +38,4 @@ public class ActivityMessages extends ActivityBase {
         fragmentTransaction.add(R.id.frmContainer, FragmentMessages.newInstance()).commit();
 
     }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        MenuInflater inflater = getMenuInflater();
-        inflater.inflate(R.menu.main_menu, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        return super.onOptionsItemSelected(item);
-    }
 }

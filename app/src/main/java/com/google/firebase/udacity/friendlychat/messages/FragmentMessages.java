@@ -1,7 +1,10 @@
 package com.google.firebase.udacity.friendlychat.messages;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -9,25 +12,37 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
+import android.widget.Toast;
 
+import com.firebase.ui.auth.AuthUI;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Transaction;
 import com.google.firebase.udacity.friendlychat.MessageAdapter;
 import com.google.firebase.udacity.friendlychat.R;
 import com.google.firebase.udacity.friendlychat.common.base.FragmentBase;
 import com.google.firebase.udacity.friendlychat.common.models.FriendlyMessage;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+
+import static android.app.Activity.RESULT_CANCELED;
+import static android.app.Activity.RESULT_OK;
 
 public class FragmentMessages extends FragmentBase implements ViewMessages {
     private RecyclerView rvMessages;
@@ -45,6 +60,8 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private FirebaseDatabase firebaseDatabase;
     private DatabaseReference databaseReference;
     private LinearLayoutManager linearLayoutManager;
+    private FirebaseAuth firebaseAuth;
+    private static final int RC_SIGN_IN = 1000;
 
     public FragmentMessages() {
         // Required empty public constructor
@@ -69,11 +86,55 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         context = getActivity();
         databaseReference = FirebaseDatabase.getInstance().getReference().child("messages");
         presenterMessages = new PresenterMessages(context, this, databaseReference);
+        firebaseAuth = FirebaseAuth.getInstance();
         initializeViews(rootView);
         initRecyclerView();
         setListeners();
+        setHasOptionsMenu(true);
         return rootView;
     }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        inflater.inflate(R.menu.main_menu, menu);
+        super.onCreateOptionsMenu(menu, inflater);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.sign_out_menu: {
+                AuthUI.getInstance().signOut(getActivity());
+                return true;
+            }
+            default:
+                return super.onOptionsItemSelected(item);
+        }
+    }
+
+    private FirebaseAuth.AuthStateListener authStateListener = new FirebaseAuth.AuthStateListener() {
+        @Override
+        public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
+            FirebaseUser user = firebaseAuth.getCurrentUser();
+            if (user != null) {
+                username = user.getDisplayName();
+            } else {
+                startActivityForResult(AuthUI.getInstance()
+                                .createSignInIntentBuilder()
+                                .setIsSmartLockEnabled(false)
+                                .setProviders(
+                                        Arrays.asList(new AuthUI.IdpConfig.Builder(AuthUI.EMAIL_PROVIDER).build(),
+                                                new AuthUI.IdpConfig.Builder(AuthUI.GOOGLE_PROVIDER).build())).build(),
+                        RC_SIGN_IN);
+            }
+        }
+    };
+
+    @Override
+    public void onResume() {
+        super.onResume();
+    }
+
 
     private void initRecyclerView() {
         linearLayoutManager = new LinearLayoutManager(context, LinearLayoutManager.VERTICAL, false);
@@ -98,8 +159,9 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         btnPhotoPicker.setOnClickListener(btnPhotoPickerOnClickListener);
         edtMessage.addTextChangedListener(edtMessageTextWatcher);
         btnSend.setOnClickListener(btnSendOnClickListener);
-        databaseReference.addChildEventListener(childEventListener);
         messageAdapter.registerAdapterDataObserver(adapterDataObserver);
+        firebaseAuth.addAuthStateListener(authStateListener);
+        databaseReference.addChildEventListener(childEventListener);
     }
 
     private RecyclerView.AdapterDataObserver adapterDataObserver = new RecyclerView.AdapterDataObserver() {
@@ -189,5 +251,21 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         else
             progressBar.setVisibility(View.GONE);
 
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == RC_SIGN_IN) {
+            if (resultCode == RESULT_OK) {
+                Toast.makeText(getActivity(), "Signed in!", Toast.LENGTH_SHORT).show();
+                getActivity().finish();
+                startActivity(getActivity().getIntent());
+            } else if (resultCode == RESULT_CANCELED) {
+                // Sign in was canceled by the user, finish the activity
+                Toast.makeText(getActivity(), "Sign in canceled", Toast.LENGTH_SHORT).show();
+                getActivity().finish();
+            }
+        }
     }
 }
