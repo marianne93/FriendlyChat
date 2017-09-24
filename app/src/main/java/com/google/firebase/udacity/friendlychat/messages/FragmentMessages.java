@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
+import android.provider.SyncStateContract;
 import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.LinearLayoutManager;
@@ -56,24 +57,30 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private static final int DEFAULT_MSG_LENGTH_LIMIT = 1000;
     private PresenterMessages presenterMessages;
     private String username;
-    private static final String ANONYMOUS = "anonymous";
     private FirebaseDatabase firebaseDatabase;
     private DatabaseReference databaseReference;
     private LinearLayoutManager linearLayoutManager;
-    private FirebaseAuth firebaseAuth;
     private static final int RC_SIGN_IN = 1000;
+    private OnFragmentMessagesInteractionListener mListener;
+    private static final String ARG_USERNAME = "username";
 
     public FragmentMessages() {
         // Required empty public constructor
     }
 
-    public static FragmentMessages newInstance() {
-        return new FragmentMessages();
+    public static FragmentMessages newInstance(String username) {
+        FragmentMessages fragment = new FragmentMessages();
+        Bundle args = new Bundle();
+        args.putString(ARG_USERNAME, username);
+        fragment.setArguments(args);
+        return fragment;
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (getArguments() != null)
+            username = getArguments().getString(ARG_USERNAME);
     }
 
     @Override
@@ -82,53 +89,14 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         // Inflate the layout for this fragment
         View rootView = inflater.inflate(R.layout.fragment_messages, container, false);
         friendlyMessages = new ArrayList<>();
-        username = ANONYMOUS;
         context = getActivity();
         databaseReference = FirebaseDatabase.getInstance().getReference().child("messages");
         presenterMessages = new PresenterMessages(context, this, databaseReference);
-        firebaseAuth = FirebaseAuth.getInstance();
         initializeViews(rootView);
         initRecyclerView();
         setListeners();
-        setHasOptionsMenu(true);
         return rootView;
     }
-
-    @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.main_menu, menu);
-        super.onCreateOptionsMenu(menu, inflater);
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.sign_out_menu: {
-                AuthUI.getInstance().signOut(getActivity());
-                return true;
-            }
-            default:
-                return super.onOptionsItemSelected(item);
-        }
-    }
-
-    private FirebaseAuth.AuthStateListener authStateListener = new FirebaseAuth.AuthStateListener() {
-        @Override
-        public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
-            FirebaseUser user = firebaseAuth.getCurrentUser();
-            if (user != null) {
-                username = user.getDisplayName();
-            } else {
-                startActivityForResult(AuthUI.getInstance()
-                                .createSignInIntentBuilder()
-                                .setIsSmartLockEnabled(false)
-                                .setProviders(
-                                        Arrays.asList(new AuthUI.IdpConfig.Builder(AuthUI.EMAIL_PROVIDER).build(),
-                                                new AuthUI.IdpConfig.Builder(AuthUI.GOOGLE_PROVIDER).build())).build(),
-                        RC_SIGN_IN);
-            }
-        }
-    };
 
     @Override
     public void onResume() {
@@ -160,7 +128,6 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         edtMessage.addTextChangedListener(edtMessageTextWatcher);
         btnSend.setOnClickListener(btnSendOnClickListener);
         messageAdapter.registerAdapterDataObserver(adapterDataObserver);
-        firebaseAuth.addAuthStateListener(authStateListener);
         databaseReference.addChildEventListener(childEventListener);
     }
 
@@ -260,12 +227,33 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
             if (resultCode == RESULT_OK) {
                 Toast.makeText(getActivity(), "Signed in!", Toast.LENGTH_SHORT).show();
                 getActivity().finish();
-                startActivity(getActivity().getIntent());
+                ActivityMessages.startActivity(context);
             } else if (resultCode == RESULT_CANCELED) {
                 // Sign in was canceled by the user, finish the activity
                 Toast.makeText(getActivity(), "Sign in canceled", Toast.LENGTH_SHORT).show();
                 getActivity().finish();
             }
         }
+    }
+
+    @Override
+    public void onAttach(Context context) {
+        super.onAttach(context);
+        if (context instanceof OnFragmentMessagesInteractionListener) {
+            mListener = (OnFragmentMessagesInteractionListener) context;
+        } else {
+            throw new RuntimeException(context.toString()
+                    + " must implement OnFragmentMessagesInteractionListener");
+        }
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        mListener = null;
+    }
+
+    public interface OnFragmentMessagesInteractionListener {
+        void onAuthenticationListener();
     }
 }
