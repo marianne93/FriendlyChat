@@ -3,6 +3,7 @@ package com.google.firebase.udacity.friendlychat.messages;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.SyncStateContract;
 import android.support.annotation.NonNull;
@@ -25,6 +26,7 @@ import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.firebase.ui.auth.AuthUI;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.ChildEventListener;
@@ -33,11 +35,15 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.Transaction;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 import com.google.firebase.udacity.friendlychat.MessageAdapter;
 import com.google.firebase.udacity.friendlychat.R;
 import com.google.firebase.udacity.friendlychat.common.base.FragmentBase;
 import com.google.firebase.udacity.friendlychat.common.models.FriendlyMessage;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -60,9 +66,12 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private FirebaseDatabase firebaseDatabase;
     private DatabaseReference databaseReference;
     private LinearLayoutManager linearLayoutManager;
-    private static final int RC_SIGN_IN = 1000;
+    private final int RC_SIGN_IN = 1000;
     private OnFragmentMessagesInteractionListener mListener;
     private static final String ARG_USERNAME = "username";
+    private final int RC_PHOTO_PICKER = 2000;
+    private FirebaseStorage firebaseStorage;
+    private StorageReference storageReference;
 
     public FragmentMessages() {
         // Required empty public constructor
@@ -92,6 +101,8 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         context = getActivity();
         databaseReference = FirebaseDatabase.getInstance().getReference().child("messages");
         presenterMessages = new PresenterMessages(context, this, databaseReference);
+        firebaseStorage = FirebaseStorage.getInstance();
+        storageReference = firebaseStorage.getReference().child("chat_photos");
         initializeViews(rootView);
         initRecyclerView();
         setListeners();
@@ -206,10 +217,16 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private View.OnClickListener btnPhotoPickerOnClickListener = new View.OnClickListener() {
         @Override
         public void onClick(View v) {
-
+            openPhotoPicker();
         }
     };
 
+    private void openPhotoPicker() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("image/jpeg");
+        intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+        startActivityForResult(Intent.createChooser(intent, "Complete action using"), RC_PHOTO_PICKER);
+    }
 
     @Override
     public void showProgress(boolean show) {
@@ -223,11 +240,12 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == RC_SIGN_IN) {
+        if (requestCode == RC_PHOTO_PICKER) {
             if (resultCode == RESULT_OK) {
-                Toast.makeText(getActivity(), "Signed in!", Toast.LENGTH_SHORT).show();
-                getActivity().finish();
-                ActivityMessages.startActivity(context);
+                Uri selectedImageUri = data.getData();
+                // Get a reference to store file at Chat_photos/<Filename>
+                StorageReference photoRef = storageReference.child(selectedImageUri.getLastPathSegment());
+                photoRef.putFile(selectedImageUri).addOnSuccessListener((ActivityMessages) context, uploadedImageOnSuccessListener);
             } else if (resultCode == RESULT_CANCELED) {
                 // Sign in was canceled by the user, finish the activity
                 Toast.makeText(getActivity(), "Sign in canceled", Toast.LENGTH_SHORT).show();
@@ -235,6 +253,16 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
             }
         }
     }
+
+    private OnSuccessListener<UploadTask.TaskSnapshot> uploadedImageOnSuccessListener = new OnSuccessListener<UploadTask.TaskSnapshot>() {
+        @Override
+        public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
+            // When the image has successfully uploaded, we get its download URL
+            @SuppressWarnings("VisibleForTests") Uri downloadURL = taskSnapshot.getDownloadUrl();
+            FriendlyMessage friendlyMessage = new FriendlyMessage(null, username, downloadURL.toString());
+            presenterMessages.sendMessage(friendlyMessage);
+        }
+    };
 
     @Override
     public void onAttach(Context context) {
