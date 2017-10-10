@@ -1,22 +1,16 @@
 package com.google.firebase.udacity.friendlychat.messages;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.SyncStateContract;
 import android.support.annotation.NonNull;
-import android.support.v4.app.Fragment;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
-import android.view.Menu;
-import android.view.MenuInflater;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -25,28 +19,28 @@ import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.Toast;
 
-import com.firebase.ui.auth.AuthUI;
+import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.Transaction;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
+import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
+import com.google.firebase.udacity.friendlychat.BuildConfig;
 import com.google.firebase.udacity.friendlychat.MessageAdapter;
 import com.google.firebase.udacity.friendlychat.R;
 import com.google.firebase.udacity.friendlychat.common.base.FragmentBase;
 import com.google.firebase.udacity.friendlychat.common.models.FriendlyMessage;
 
-import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static android.app.Activity.RESULT_CANCELED;
 import static android.app.Activity.RESULT_OK;
@@ -67,11 +61,13 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
     private DatabaseReference databaseReference;
     private LinearLayoutManager linearLayoutManager;
     private final int RC_SIGN_IN = 1000;
+    private final String FRIENDLY_MSG_LENGTH_KEY = "friendly_msg_length";
     private OnFragmentMessagesInteractionListener mListener;
     private static final String ARG_USERNAME = "username";
     private final int RC_PHOTO_PICKER = 2000;
     private FirebaseStorage firebaseStorage;
     private StorageReference storageReference;
+    private FirebaseRemoteConfig firebaseRemoteConfig;
 
     public FragmentMessages() {
         // Required empty public constructor
@@ -102,11 +98,66 @@ public class FragmentMessages extends FragmentBase implements ViewMessages {
         databaseReference = FirebaseDatabase.getInstance().getReference().child("messages");
         presenterMessages = new PresenterMessages(context, this, databaseReference);
         firebaseStorage = FirebaseStorage.getInstance();
+        firebaseRemoteConfig = FirebaseRemoteConfig.getInstance();
         storageReference = firebaseStorage.getReference().child("chat_photos");
         initializeViews(rootView);
         initRecyclerView();
         setListeners();
+        initRemoteConfigSettings();
         return rootView;
+    }
+
+    private void initRemoteConfigSettings() {
+        // Create Remote Config Setting to enable developer mode.
+        // Fetching configs from the server is normally limited to 5 requests per hour.
+        // Enabling developer mode allows many more requests to be made per hour, so developers
+        // can test different config values during development.
+        FirebaseRemoteConfigSettings configSettings = new FirebaseRemoteConfigSettings.Builder()
+                .setDeveloperModeEnabled(BuildConfig.DEBUG)
+                .build();
+        firebaseRemoteConfig.setConfigSettings(configSettings);
+        // Define default config values. Defaults are used when fetched config values are not
+        // available. Eg: if an error occurred fetching values from the server.
+        Map<String, Object> defaultConfigMap = new HashMap<>();
+        defaultConfigMap.put(FRIENDLY_MSG_LENGTH_KEY, DEFAULT_MSG_LENGTH_LIMIT);
+        firebaseRemoteConfig.setDefaults(defaultConfigMap);
+        fetchConfig();
+    }
+
+    // Fetch the config to determine the allowed length of messages.
+    private void fetchConfig() {
+        long cacheExpiration = 3600; // 1 hour in seconds
+        // If developer mode is enabled reduce cacheExpiration to 0 so that each fetch goes to the
+        // server. This should not be used in release builds.
+        if (firebaseRemoteConfig.getInfo().getConfigSettings().isDeveloperModeEnabled())
+            cacheExpiration = 0;
+        firebaseRemoteConfig.fetch(cacheExpiration).addOnSuccessListener(firebaseRemoteConfigOnSuccessListener)
+                .addOnFailureListener(firebaseRemoteConfigOnFailureListener);
+    }
+
+    private OnSuccessListener<Void> firebaseRemoteConfigOnSuccessListener = new OnSuccessListener<Void>() {
+        @Override
+        public void onSuccess(Void aVoid) {
+            // Make the fetched config available
+            // via FirebaseRemoteConfig get<type> calls, e.g., getLong, getString.
+            firebaseRemoteConfig.activateFetched();
+            // Update the EditText length limit with
+            // the newly retrieved values from Remote Config.
+            applyRetrievedLengthLimit();
+        }
+    };
+    private OnFailureListener firebaseRemoteConfigOnFailureListener = new OnFailureListener() {
+        @Override
+        public void onFailure(@NonNull Exception e) {
+            // An error occurred when fetching the config.
+            applyRetrievedLengthLimit();
+
+        }
+    };
+
+    private void applyRetrievedLengthLimit() {
+        Long friendly_msg_length = firebaseRemoteConfig.getLong(FRIENDLY_MSG_LENGTH_KEY);
+        edtMessage.setFilters(new InputFilter[]{new InputFilter.LengthFilter(friendly_msg_length.intValue())});
     }
 
     @Override
